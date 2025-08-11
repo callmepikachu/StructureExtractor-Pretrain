@@ -1,0 +1,49 @@
+# Core ML/DL frameworks
+torch>=1.12.0
+torch-geometric>=2.2.0
+transformers>=4.20.0
+datasets>=2.0.0
+
+# Graph processing
+networkx>=2.8
+dgl>=0.9.0
+
+# Data processing
+numpy>=1.21.0
+pandas>=1.4.0
+scipy>=1.8.0
+
+# NLP preprocessing
+spacy>=3.4.0
+nltk>=3.7
+
+# Vector databases and search
+faiss-cpu>=1.7.2
+elasticsearch>=8.0.0
+
+# Configuration and logging
+pyyaml>=6.0
+omegaconf>=2.2.0
+wandb>=0.12.0
+tensorboard>=2.9.0
+
+# Utilities
+tqdm>=4.64.0
+scikit-learn>=1.1.0
+matplotlib>=3.5.0
+seaborn>=0.11.0
+
+# Development tools
+pytest>=7.0.0
+black>=22.0.0
+flake8>=4.0.0
+
+# Entity linking and NER
+blink-nlp>=0.1.0
+luke-model>=0.1.0
+
+# Memory management
+psutil>=5.9.0
+
+# JSON processing
+jsonlines>=3.0.0

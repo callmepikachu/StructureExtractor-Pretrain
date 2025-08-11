@@ -1,0 +1,105 @@
+# StructureExtractor-Pretrain Default Configuration
+
+# Model Configuration
+model:
+  name: "StructureExtractor"
+  hidden_dim: 768
+  num_layers: 6
+  num_heads: 12
+  dropout: 0.1
+  activation: "gelu"
+  
+  # GNN specific parameters
+  gnn_type: "GAT"  # Graph Attention Network
+  gnn_layers: 3
+  gnn_hidden_dim: 256
+  
+  # ContinualGNN parameters
+  memory_capacity: 500  # Size of memory buffer M
+  regularization_weight: 100.0  # Lambda for Fisher regularization
+  influence_threshold: 0.01  # Delta for influence detection
+  detection_hop: 2  # L-hop for influence propagation
+  
+  # StreamE parameters
+  enable_incremental_update: true
+  structural_change_weight: 0.5
+
+# Data Configuration
+data:
+  dataset_name: "ReDocRED"
+  data_dir: "./data"
+  train_file: "train.json"
+  dev_file: "dev.json"
+  test_file: "test.json"
+  
+  # Preprocessing
+  max_seq_length: 512
+  max_entities: 100
+  max_relations: 50
+  
+  # Entity linking
+  entity_linking:
+    confidence_threshold_high: 0.8
+    confidence_threshold_low: 0.5
+    candidate_top_k: 50
+
+# Training Configuration
+training:
+  batch_size: 8
+  learning_rate: 2e-5
+  num_epochs: 10
+  warmup_steps: 1000
+  weight_decay: 0.01
+  gradient_clip_norm: 1.0
+  
+  # Optimizer
+  optimizer: "AdamW"
+  scheduler: "linear"
+  
+  # Checkpointing
+  save_steps: 1000
+  eval_steps: 500
+  logging_steps: 100
+  
+  # Early stopping
+  early_stopping_patience: 3
+  early_stopping_threshold: 0.001
+
+# Evaluation Configuration
+evaluation:
+  metrics: ["precision", "recall", "f1", "accuracy"]
+  batch_size: 16
+
+# Infrastructure Configuration
+infrastructure:
+  # Vector database
+  vector_db:
+    type: "faiss"  # Options: faiss, weaviate, milvus
+    index_type: "IVF"
+    dimension: 768
+    
+  # Graph database
+  graph_db:
+    type: "networkx"  # Options: networkx, neo4j
+    
+  # Logging
+  logging:
+    level: "INFO"
+    log_dir: "./logs"
+    use_wandb: false
+    wandb_project: "structure-extractor-pretrain"
+    
+  # Device
+  device: "auto"  # auto, cpu, cuda
+  mixed_precision: true
+
+# Paths
+paths:
+  model_dir: "./checkpoints"
+  log_dir: "./logs"
+  data_dir: "./data"
+  cache_dir: "./cache"
+
+# Reproducibility
+seed: 42
+deterministic: true
