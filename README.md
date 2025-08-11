@@ -3,6 +3,7 @@
 
 
 
+```
 StructureExtractor-Pretrain/
 ├── README.md                           # 项目介绍、安装指南、使用方法
 ├── requirements.txt                    # Python 依赖包列表
@@ -45,3 +46,4 @@ StructureExtractor-Pretrain/
     ├── train.json                      # ReDocRED 训练集
     ├── dev.json                        # ReDocRED 验证集
     └── # ... (test.json 等)
+```
