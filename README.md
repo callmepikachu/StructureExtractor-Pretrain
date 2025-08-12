@@ -1,7 +1,8 @@
 # StructureExtractor-Pretrain
-预训练GDM-Net的 StructureExtractor
 
+预训练GDM-Net的 StructureExtractor，融合了 ContinualGNN 和 StreamE 思想的长文档图构建模型。
 
+## 项目结构
 
 ```
 StructureExtractor-Pretrain/
@@ -24,18 +25,20 @@ StructureExtractor-Pretrain/
 │   ├── train/                          # 训练相关代码
 │   │   ├── __init__.py
 │   │   ├── trainer.py                  # 训练器类 (PretrainTrainer)，封装训练循环
-│   │   └── train.py                    # 训练脚本入口 (main function)
+│   │   ├── train.py                    # 训练脚本入口 (main function)
+│   │   └── train_eval.py               # 训练和评估一体化脚本
 │   ├── evaluate/                       # 评估相关代码
 │   │   ├── __init__.py
-│   │   └── evaluate.py                 # 评估脚本/函数
+│   │   ├── evaluate.py                 # 评估函数
+│   │   └── eval.py                     # 评估脚本入口
 │   └── utils/                          # 工具函数
 │       ├── __init__.py
 │       ├── config.py                   # 配置加载和验证
 │       ├── logger.py                   # 日志配置
 │       └── # 其他通用工具 (如 metrics 计算)
 ├── scripts/                            # 实用脚本目录
-│   ├── download_redocred.sh            # 下载 ReDocRED 数据的脚本 (如果需要)
-│   └── # 其他脚本 (如 run_training.sh, run_evaluation.sh)
+│   ├── download_redocred.sh            # 下载 ReDocRED 数据的脚本
+│   └── run_pipeline.sh                 # 运行完整训练评估流程的脚本
 ├── notebooks/                          # (可选) 探索性数据分析或模型实验的 Jupyter Notebooks
 │   └── # ...
 ├── checkpoints/                        # (初始为空) 用于存放训练好的模型检查点
@@ -47,3 +50,74 @@ StructureExtractor-Pretrain/
     ├── dev.json                        # ReDocRED 验证集
     └── # ... (test.json 等)
 ```
+
+## 安装指南
+
+1. 克隆项目仓库:
+   ```
+   git clone <repository-url>
+   cd StructureExtractor-Pretrain
+   ```
+
+2. 创建虚拟环境 (推荐):
+   ```
+   python -m venv venv
+   source venv/bin/activate  # Linux/Mac
+   # 或
+   venv\\Scripts\\activate  # Windows
+   ```
+
+3. 安装依赖:
+   ```
+   pip install -r requirements.txt
+   ```
+
+## 使用方法
+
+### 1. 下载数据集
+```
+bash scripts/download_redocred.sh
+```
+
+### 2. 运行完整训练评估流程
+```
+bash scripts/run_pipeline.sh
+```
+
+### 3. 单独训练模型
+```
+python src/train/train.py --config config/default_config.yaml --train-data data/train_revised.json --dev-data data/dev_revised.json --output-dir output
+```
+
+### 4. 评估模型
+```
+python src/evaluate/eval.py \\
+    --config config/default_config.yaml \\
+    --checkpoint output/checkpoints/best_model.pt \\
+    --test-data data/dev.json \\
+    --output-dir output
+```
+
+## 配置说明
+
+配置文件 `config/default_config.yaml` 包含模型、数据、训练和评估的所有参数。主要配置项包括：
+
+- `model`: 模型架构参数
+- `data`: 数据处理参数
+- `training`: 训练超参数
+- `evaluation`: 评估参数
+- `infrastructure`: 基础设施配置 (设备、日志等)
+
+## 技术特点
+
+本项目实现了以下关键技术：
+
+1. **ContinualGNN**: 持续学习机制，防止灾难性遗忘
+2. **StreamE**: 流式图构建和增量更新
+3. **双重视角知识巩固**: 结合数据回放和模型正则化
+4. **分层-重要性采样**: 优化记忆库更新策略
+5. **近似影响检测**: 高效检测文档变化对知识图谱的影响
+
+## 许可证
+
+本项目基于 MIT 许可证开源。

@@ -38,10 +38,6 @@ pytest>=7.0.0
 black>=22.0.0
 flake8>=4.0.0
 
-# Entity linking and NER
-blink-nlp>=0.1.0
-luke-model>=0.1.0
-
 # Memory management
 psutil>=5.9.0
 

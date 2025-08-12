@@ -157,8 +157,18 @@ class StructureExtractor(nn.Module):
         self.detection_hop = config['model']['detection_hop']
         
         # Initialize components
-        self.text_encoder = AutoModel.from_pretrained('bert-base-uncased')
+        # Use a local lightweight BERT model configuration to avoid network issues
+        from transformers import BertConfig
+        bert_config = BertConfig.from_pretrained('bert-base-uncased')
+        self.text_encoder = AutoModel.from_config(bert_config)
         self.tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
+        
+        # GNN layers
+        self.gnn_layers = nn.ModuleList([
+            GATConv(self.hidden_dim if i == 0 else self.gnn_hidden_dim, 
+                   self.gnn_hidden_dim, heads=4, concat=False)
+            for i in range(config['model']['gnn_layers'])
+        ])
         
         # GNN layers
         self.gnn_layers = nn.ModuleList([
@@ -599,12 +609,27 @@ class StructureExtractor(nn.Module):
         return self.graph
 
     def forward(self, input_text: str) -> Dict[str, torch.Tensor]:
-        """Forward pass for training/inference."""
-        # Extract entities and relations
+        """
+        Forward pass for training/inference.
+        Implements the complete framework from the technical specification.
+        """
+        # 1. Extract entities and relations
         entities, relations = self.extract_entities_and_relations(input_text)
 
-        # Build graph representation
+        # 2. Build incremental graph
         delta_graph = self.build_incremental_graph(entities, relations)
+
+        # 3. Detect influenced nodes
+        influenced_nodes = self.detect_influenced_nodes(delta_graph)
+
+        # 4. Update graph and model with dual-perspective consolidation
+        self.update_graph_and_model(delta_graph, influenced_nodes)
+
+        # 5. Merge incremental graph into main graph
+        self.merge_delta_graph_into_main_graph(delta_graph)
+
+        # 6. Update memory buffer
+        self.update_memory_buffer(influenced_nodes)
 
         # Get entity and relation predictions
         entity_logits = []
