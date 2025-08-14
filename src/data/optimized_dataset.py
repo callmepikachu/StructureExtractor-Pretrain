@@ -1,6 +1,6 @@
 """
-ReDocRED Dataset implementation for StructureExtractor-Pretrain.
-Handles loading and processing of ReDocRED data for document-level relation extraction.
+Optimized ReDocRED Dataset implementation for StructureExtractor-Pretrain.
+Supports loading preprocessed chunks from disk for efficient training.
 """
 
 import json
@@ -11,15 +11,85 @@ from typing import Dict, List, Any, Tuple, Optional
 import numpy as np
 from collections import defaultdict
 import logging
+import os
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 
-class ReDocREDDataset(Dataset):
+class OptimizedReDocREDDataset(Dataset):
     """
-    ReDocRED dataset for document-level relation extraction.
-    Processes documents into chunks suitable for incremental graph construction.
-    Implements lazy loading to reduce memory usage.
+    Optimized ReDocRED dataset that loads preprocessed chunks from disk.
+    Significantly reduces memory usage and loading time.
+    """
+    
+    def __init__(self, 
+                 data_dir: str,
+                 tokenizer_name: str = "bert-base-uncased",
+                 max_seq_length: int = 512):
+        """
+        Initialize optimized dataset.
+        
+        Args:
+            data_dir: Directory containing preprocessed chunk files
+            tokenizer_name: Name of tokenizer to use
+            max_seq_length: Maximum sequence length for tokenization
+        """
+        self.data_dir = data_dir
+        self.max_seq_length = max_seq_length
+        
+        # Initialize tokenizer
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+        
+        # Load chunk index
+        self.chunk_index = self._load_chunk_index()
+        
+        # Load first chunk to get structure info
+        self._load_chunk_data(0)
+        
+        logger.info(f"Loaded optimized dataset with {len(self.chunk_index['chunk_files'])} chunk files")
+    
+    def _load_chunk_index(self) -> Dict[str, Any]:
+        """Load chunk index from disk."""
+        index_file = os.path.join(self.data_dir, "chunk_index.json")
+        with open(index_file, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    
+    def _load_chunk_data(self, chunk_file_idx: int) -> List[Dict[str, Any]]:
+        """Load chunk data from a specific file."""
+        if chunk_file_idx >= len(self.chunk_index['chunk_files']):
+            raise IndexError(f"Chunk file index {chunk_file_idx} out of range")
+        
+        chunk_file = self.chunk_index['chunk_files'][chunk_file_idx]
+        with open(chunk_file, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    
+    def __len__(self) -> int:
+        """Return total number of chunks."""
+        return self.chunk_index['total_chunks']
+    
+    def __getitem__(self, idx: int) -> Dict[str, Any]:
+        """Get a single chunk by index."""
+        # Calculate which file and position within file
+        chunk_size = self.chunk_index['chunk_size']
+        file_idx = idx // chunk_size
+        position_idx = idx % chunk_size
+        
+        # Load chunk data if not already loaded or if different file
+        if not hasattr(self, '_current_chunks') or getattr(self, '_current_file_idx', -1) != file_idx:
+            self._current_chunks = self._load_chunk_data(file_idx)
+            self._current_file_idx = file_idx
+        
+        # Return chunk data
+        if position_idx >= len(self._current_chunks):
+            raise IndexError(f"Position index {position_idx} out of range in file {file_idx}")
+        
+        return self._current_chunks[position_idx]
+
+
+class MemoryEfficientReDocREDDataset(Dataset):
+    """
+    Memory-efficient ReDocRED dataset that loads data on-demand with caching.
     """
     
     def __init__(self, 
@@ -28,29 +98,48 @@ class ReDocREDDataset(Dataset):
                  max_seq_length: int = 512,
                  max_entities: int = 100,
                  max_relations: int = 50,
-                 chunk_size: int = 3,  # Number of sentences per chunk
+                 chunk_size: int = 3,
                  overlap_size: int = 1,
-                 max_documents: int = None):  # Limit number of documents to load
+                 max_documents: int = None,
+                 cache_size: int = 100):
+        """
+        Initialize memory-efficient dataset.
         
+        Args:
+            data_path: Path to ReDocRED data file
+            tokenizer_name: Name of tokenizer to use
+            max_seq_length: Maximum sequence length for tokenization
+            max_entities: Maximum number of entities per chunk
+            max_relations: Maximum number of relations per chunk
+            chunk_size: Number of sentences per chunk
+            overlap_size: Overlap between chunks
+            max_documents: Maximum number of documents to load
+            cache_size: Number of processed chunks to cache in memory
+        """
         self.data_path = data_path
         self.max_seq_length = max_seq_length
         self.max_entities = max_entities
         self.max_relations = max_relations
         self.chunk_size = chunk_size
         self.overlap_size = overlap_size
+        self.cache_size = cache_size
         
         # Initialize tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
         
-        # Load data index for lazy loading
+        # Load data index
         self.data = self._load_data()
         # Limit number of documents if specified
         if max_documents:
             self.data = self.data[:max_documents]
             logger.info(f"Limited to {len(self.data)} documents")
             
-        # Create an index of all chunks without processing them
+        # Create an index of all chunks
         self.chunk_index = self._create_chunk_index()
+        
+        # Initialize cache
+        self.chunk_cache = {}
+        self.cache_order = []
         
         logger.info(f"Indexed {len(self.chunk_index)} document chunks from {data_path}")
     
@@ -65,7 +154,7 @@ class ReDocREDDataset(Dataset):
             return []
     
     def _create_chunk_index(self) -> List[Tuple[int, int, List[List[str]]]]:
-        """Create an index of all chunks without processing them."""
+        """Create an index of all chunks."""
         chunk_index = []
         
         for doc_idx, doc in enumerate(self.data):
@@ -110,7 +199,7 @@ class ReDocREDDataset(Dataset):
                       doc_idx: int,
                       chunk_idx: int,
                       chunk_sentences: List[List[str]]) -> Dict[str, Any]:
-        """Process a single chunk into training format (lazy loading)."""
+        """Process a single chunk into training format."""
         
         # Get document data
         doc = self.data[doc_idx]
@@ -223,24 +312,30 @@ class ReDocREDDataset(Dataset):
         return len(self.chunk_index)
     
     def __getitem__(self, idx: int) -> Dict[str, Any]:
-        """Get a single chunk by index (lazy loading)."""
+        """Get a single chunk by index with caching."""
         if idx >= len(self.chunk_index):
             raise IndexError(f"Index {idx} out of range for dataset of size {len(self.chunk_index)}")
+        
+        # Check cache first
+        if idx in self.chunk_cache:
+            # Move to end of cache order (most recently used)
+            self.cache_order.remove(idx)
+            self.cache_order.append(idx)
+            return self.chunk_cache[idx]
         
         # Get chunk info from index
         doc_idx, chunk_idx, chunk_sentences = self.chunk_index[idx]
         
         # Process chunk on-demand
-        return self._process_chunk(doc_idx, chunk_idx, chunk_sentences)
-    
-    def get_document_chunks(self, doc_id: str) -> List[Dict[str, Any]]:
-        """Get all chunks for a specific document."""
-        # This method is not compatible with lazy loading implementation
-        # Would need to process all chunks to implement this
-        raise NotImplementedError("get_document_chunks not implemented for lazy loading dataset")
-    
-    def get_statistics(self) -> Dict[str, Any]:
-        """Get dataset statistics."""
-        # This method is not compatible with lazy loading implementation
-        # Would need to process all chunks to implement this
-        raise NotImplementedError("get_statistics not implemented for lazy loading dataset")
+        chunk_data = self._process_chunk(doc_idx, chunk_idx, chunk_sentences)
+        
+        # Add to cache
+        self.chunk_cache[idx] = chunk_data
+        self.cache_order.append(idx)
+        
+        # Remove oldest item if cache is full
+        if len(self.chunk_cache) > self.cache_size:
+            oldest_idx = self.cache_order.pop(0)
+            del self.chunk_cache[oldest_idx]
+        
+        return chunk_data

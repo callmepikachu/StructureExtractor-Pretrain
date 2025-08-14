@@ -98,6 +98,14 @@ python src/evaluate/eval.py \\
     --output-dir output
 ```
 
+### 5. 数据预处理（可选，推荐用于大数据集）
+```
+python scripts/preprocess_data.py \\
+    --config config/default_config.yaml \\
+    --input-data data/train_revised.json \\
+    --output-dir data/preprocessed_train
+```
+
 ## 配置说明
 
 配置文件 `config/default_config.yaml` 包含模型、数据、训练和评估的所有参数。主要配置项包括：
@@ -107,6 +115,16 @@ python src/evaluate/eval.py \\
 - `training`: 训练超参数
 - `evaluation`: 评估参数
 - `infrastructure`: 基础设施配置 (设备、日志等)
+
+### 数据加载优化
+
+为了处理大型数据集，我们提供了多种数据加载优化方案：
+
+1. **懒加载**：按需处理数据chunk，减少初始内存占用
+2. **内存高效加载器**：使用LRU缓存机制，平衡内存使用和性能
+3. **预处理脚本**：预先处理数据，避免训练时重复计算
+
+详细信息请参见 `数据加载优化方案.md` 文件。
 
 ## 技术特点
 

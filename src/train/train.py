@@ -14,6 +14,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from src.model.extractor import StructureExtractor
 from src.data.dataset import ReDocREDDataset
+from src.data.optimized_dataset import MemoryEfficientReDocREDDataset
 from src.train.trainer import PretrainTrainer
 from src.utils.config import load_config, validate_config
 from src.utils.logger import setup_default_logger
@@ -93,12 +94,29 @@ def main():
     
     # Load datasets
     logger.info("Loading training data")
-    train_dataset = ReDocREDDataset(
-        data_path=args.train_data,
-        max_seq_length=config['data'].get('max_seq_length', 512),
-        max_entities=config['data'].get('max_entities', 100),
-        max_relations=config['data'].get('max_relations', 50)
-    )
+    
+    # Use optimized dataset if enabled in config
+    if config['data'].get('use_memory_efficient_loader', False):
+        train_dataset = MemoryEfficientReDocREDDataset(
+            data_path=args.train_data,
+            max_seq_length=config['data'].get('max_seq_length', 512),
+            max_entities=config['data'].get('max_entities', 100),
+            max_relations=config['data'].get('max_relations', 50),
+            chunk_size=config['data'].get('chunk_size', 3),
+            overlap_size=config['data'].get('overlap_size', 1),
+            max_documents=config['data'].get('max_documents', None),
+            cache_size=config['data'].get('cache_size', 100)
+        )
+    else:
+        train_dataset = ReDocREDDataset(
+            data_path=args.train_data,
+            max_seq_length=config['data'].get('max_seq_length', 512),
+            max_entities=config['data'].get('max_entities', 100),
+            max_relations=config['data'].get('max_relations', 50),
+            chunk_size=config['data'].get('chunk_size', 3),
+            overlap_size=config['data'].get('overlap_size', 1),
+            max_documents=config['data'].get('max_documents', None)
+        )
     
     dev_dataset = None
     if args.dev_data:

@@ -36,6 +36,11 @@ data:
   max_seq_length: 512
   max_entities: 100
   max_relations: 50
+  chunk_size: 3
+  overlap_size: 1
+  max_documents: null  # null means no limit, use number to limit for testing
+  use_memory_efficient_loader: true  # Use memory-efficient data loader
+  cache_size: 100  # Number of chunks to cache in memory
   
   # Entity linking
   entity_linking:
