@@ -100,10 +100,7 @@ python src/evaluate/eval.py \\
 
 ### 5. 数据预处理（可选，推荐用于大数据集）
 ```
-python scripts/preprocess_data.py \\
-    --config config/default_config.yaml \\
-    --input-data data/train_revised.json \\
-    --output-dir data/preprocessed_train
+python scripts/preprocess_data.py     --config config/default_config.yaml     --input-data data/train_revised.json     --output-dir data/preprocessed_train
 ```
 
 ## 配置说明

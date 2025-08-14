@@ -11,6 +11,7 @@ from typing import Dict, List, Any, Tuple, Optional
 import numpy as np
 from collections import defaultdict
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -67,12 +68,20 @@ class ReDocREDDataset(Dataset):
     def _create_chunk_index(self) -> List[Tuple[int, int, List[List[str]]]]:
         """Create an index of all chunks without processing them."""
         chunk_index = []
-        
+        t0 = time.time()
+
         for doc_idx, doc in enumerate(self.data):
+            if doc_idx % 100 == 0:
+                elapsed = time.time() - t0
+                print(f"[DEBUG] 已处理 {doc_idx} 篇文档, 用时 {elapsed:.2f}s, chunk_index 长度 {len(chunk_index)}")
+                t0 = time.time()
+
             try:
                 # Extract document information
                 sentences = doc.get('sents', [])
-                
+                if not sentences:
+                    continue  # 跳过空文档
+
                 # Create chunks from sentences
                 chunks = self._create_chunks(sentences)
                 
@@ -93,17 +102,16 @@ class ReDocREDDataset(Dataset):
         
         chunks = []
         start_idx = 0
+        num_sentences = len(sentences)
         
-        while start_idx < len(sentences):
-            end_idx = min(start_idx + self.chunk_size, len(sentences))
+        while start_idx < num_sentences:
+            end_idx = min(start_idx + self.chunk_size, num_sentences)
             chunk = sentences[start_idx:end_idx]
             chunks.append(chunk)
             
             # Move to next chunk with overlap
-            start_idx = end_idx - self.overlap_size
-            if start_idx >= len(sentences):
-                break
-        
+            start_idx += self.chunk_size - self.overlap_size
+
         return chunks
     
     def _process_chunk(self, 
