@@ -1,134 +1,174 @@
 # StructureExtractor-Pretrain
 
-预训练GDM-Net的 StructureExtractor，融合了 ContinualGNN 和 StreamE 思想的长文档图构建模型。
+Pre-training StructureExtractor for GDM-Net, a long document graph construction model integrating ContinualGNN and StreamE ideas.
 
-## 项目结构
+## Project Description
+
+This project implements a pre-training framework for StructureExtractor, a core component of GDM-Net designed for long document graph construction. It combines the strengths of ContinualGNN and StreamE to efficiently build and update knowledge graphs from document streams while mitigating catastrophic forgetting.
+
+### Baseline
+
+The baseline for this project is the GDM-Net framework, which decomposes document-level relation extraction (DocRE) into two stages:
+1. **StructureExtractor**: Builds a knowledge graph from the input document.
+2. **GMF (Graph-based Matching Framework)**: Performs relation classification on the extracted graph.
+
+This project focuses on pre-training the StructureExtractor component using the ReDocRED dataset. The goal is to create a robust graph construction model that can be fine-tuned for specific DocRE tasks.
+
+### Dataset
+
+The primary dataset used for pre-training is **ReDocRED**, a large-scale human-annotated dataset for document-level relation extraction. ReDocRED extends the DocRED dataset with revised annotations and additional documents, making it suitable for evaluating long document understanding.
+
+Key characteristics of ReDocRED:
+- Contains 10,769 documents for training
+- Includes 964 documents for development and 994 for testing
+- Covers 96 entity types and 49 relation types
+- Provides document-level annotations with multiple facts per document
+
+## Project Structure
 
 ```
 StructureExtractor-Pretrain/
-├── README.md                           # 项目介绍、安装指南、使用方法
-├── requirements.txt                    # Python 依赖包列表
-├── config/                             # 配置文件目录
-│   ├── default_config.yaml             # 默认配置文件
-│   └── # 其他特定配置 (如 for_training.yaml, for_inference.yaml)
-├── src/                                # 源代码主目录
+├── README.md                           # Project introduction, installation guide, usage instructions
+├── requirements.txt                    # Python dependencies list
+├── config/                             # Configuration files directory
+│   ├── default_config.yaml             # Default configuration file
+│   └── # Other specific configurations (e.g., for_training.yaml, for_inference.yaml)
+├── src/                                # Main source code directory
 │   ├── __init__.py
-│   ├── data/                           # 数据处理相关代码
+│   ├── data/                           # Data processing related code
 │   │   ├── __init__.py
-│   │   ├── dataset.py                  # ReDocRED 数据集类 (ReDocREDDataset)
-│   │   ├── collator.py                 # 自定义数据整理器 (DataCollator)
-│   │   └── preprocess.py               # (可选) 数据预处理脚本/函数
-│   ├── model/                          # 模型相关代码 (核心是 StructureExtractor)
+│   │   ├── dataset.py                  # ReDocRED dataset class (ReDocREDDataset)
+│   │   ├── collator.py                 # Custom data collator (DataCollator)
+│   │   └── preprocess.py               # (Optional) Data preprocessing scripts/functions
+│   ├── model/                          # Model related code (core is StructureExtractor)
 │   │   ├── __init__.py
-│   │   ├── extractor.py                # 您设计的 StructureExtractor 模型 (可复用或微调 GDM-Net 中的版本)
-│   │   └── # 其他模型组件 (如果需要，如简化版的 GraphWriter 用于验证)
-│   ├── train/                          # 训练相关代码
+│   │   ├── extractor.py                # The designed StructureExtractor model (can reuse or fine-tune version from GDM-Net)
+│   │   └── # Other model components (if needed, such as simplified GraphWriter for validation)
+│   ├── train/                          # Training related code
 │   │   ├── __init__.py
-│   │   ├── trainer.py                  # 训练器类 (PretrainTrainer)，封装训练循环
-│   │   ├── train.py                    # 训练脚本入口 (main function)
-│   │   └── train_eval.py               # 训练和评估一体化脚本
-│   ├── evaluate/                       # 评估相关代码
+│   │   ├── trainer.py                  # Trainer class (PretrainTrainer), encapsulating training loop
+│   │   ├── train.py                    # Training script entry point (main function)
+│   │   └── train_eval.py               # Integrated training and evaluation script
+│   ├── evaluate/                       # Evaluation related code
 │   │   ├── __init__.py
-│   │   ├── evaluate.py                 # 评估函数
-│   │   └── eval.py                     # 评估脚本入口
-│   └── utils/                          # 工具函数
+│   │   ├── evaluate.py                 # Evaluation functions
+│   │   └── eval.py                     # Evaluation script entry point
+│   └── utils/                          # Utility functions
 │       ├── __init__.py
-│       ├── config.py                   # 配置加载和验证
-│       ├── logger.py                   # 日志配置
-│       └── # 其他通用工具 (如 metrics 计算)
-├── scripts/                            # 实用脚本目录
-│   ├── download_redocred.sh            # 下载 ReDocRED 数据的脚本
-│   └── run_pipeline.sh                 # 运行完整训练评估流程的脚本
-├── notebooks/                          # (可选) 探索性数据分析或模型实验的 Jupyter Notebooks
+│       ├── config.py                   # Configuration loading and validation
+│       ├── logger.py                   # Logging configuration
+│       └── # Other general tools (e.g., metrics calculation)
+├── scripts/                            # Utility scripts directory
+│   ├── download_redocred.sh            # Script to download ReDocRED data
+│   └── run_pipeline.sh                 # Script to run the complete training and evaluation pipeline
+├── notebooks/                          # (Optional) Jupyter Notebooks for exploratory data analysis or model experiments
 │   └── # ...
-├── checkpoints/                        # (初始为空) 用于存放训练好的模型检查点
+├── checkpoints/                        # (Initially empty) Directory for storing trained model checkpoints
 │   └── # ...
-├── logs/                               # (初始为空) 用于存放训练日志
+├── logs/                               # (Initially empty) Directory for storing training logs
 │   └── # ...
-└── data/                               # (初始为空或符号链接) 指向 ReDocRED 数据集的实际存放位置
-    ├── train.json                      # ReDocRED 训练集
-    ├── dev.json                        # ReDocRED 验证集
-    └── # ... (test.json 等)
+└── data/                               # (Initially empty or symbolic link) Points to the actual location of ReDocRED dataset
+    ├── train.json                      # ReDocRED training set
+    ├── dev.json                        # ReDocRED validation set
+    └── # ... (test.json etc.)
 ```
 
-## 安装指南
+## Installation Guide
 
-1. 克隆项目仓库:
+1. Clone the project repository:
    ```
    git clone <repository-url>
    cd StructureExtractor-Pretrain
    ```
 
-2. 创建虚拟环境 (推荐):
+2. Create a virtual environment (recommended):
    ```
    python -m venv venv
    source venv/bin/activate  # Linux/Mac
-   # 或
-   venv\\Scripts\\activate  # Windows
+   # or
+   venv\Scripts\activate  # Windows
    ```
 
-3. 安装依赖:
+3. Install dependencies:
    ```
    pip install -r requirements.txt
    ```
 
-## 使用方法
+## Usage
 
-### 1. 下载数据集
+### 1. Download Dataset
 ```
 bash scripts/download_redocred.sh
 ```
 
-### 2. 运行完整训练评估流程
+### 2. Run Complete Training and Evaluation Pipeline
 ```
 bash scripts/run_pipeline.sh
 ```
 
-### 3. 单独训练模型
-\n
-#### 使用预处理数据训练（推荐用于大数据集）
+### 3. Train Model Separately
+
+#### Train with Preprocessed Data (Recommended for Large Datasets)
 ```
 python src/train/train.py --config config/default_config.yaml --train-data data/preprocessed_train --dev-data data/dev_revised.json --output-dir output --use-preprocessed-data
 ```
+
+#### Train with Raw Data
 ```
 python src/train/train.py --config config/default_config.yaml --train-data data/train_revised.json --dev-data data/dev_revised.json --output-dir output
 ```
 
-### 4. 评估模型\n\n使用适配后的评估脚本（推荐）：\n```\npython src/evaluate/eval_adapted.py \\\n    --config config/default_config.yaml \\\n    --checkpoint output/checkpoints/best_model.pt \\\n    --test-data data/dev.json \\\n    --output-dir output\n```\n\n或者使用原始评估脚本：\n```\npython src/evaluate/eval.py \\\n    --config config/default_config.yaml \\\n    --checkpoint output/checkpoints/best_model.pt \\\n    --test-data data/dev.json \\\n    --output-dir output\n```\n\n### 5. 数据预处理（可选，推荐用于大数据集）
+### 4. Evaluate Model
+
+Using the adapted evaluation script (recommended):
 ```
-python scripts/preprocess_data.py     --config config/default_config.yaml     --input-data data/train_revised.json     --output-dir data/preprocessed_train
+python src/evaluate/eval_adapted.py --config config/default_config.yaml --checkpoint output/checkpoints/best_model.pt --test-data data/dev.json --output-dir output
 ```
 
-## 配置说明
+Or using the original evaluation script:
+```
+python src/evaluate/eval.py \
+    --config config/default_config.yaml \
+    --checkpoint output/checkpoints/best_model.pt \
+    --test-data data/dev.json \
+    --output-dir output
+```
 
-配置文件 `config/default_config.yaml` 包含模型、数据、训练和评估的所有参数。主要配置项包括：
+### 5. Preprocess Data (Optional, Recommended for Large Datasets)
+```
+python scripts/preprocess_data.py --config config/default_config.yaml --input-data data/train_revised.json --output-dir data/preprocessed_train
+```
 
-- `model`: 模型架构参数
-- `data`: 数据处理参数
-- `training`: 训练超参数
-- `evaluation`: 评估参数
-- `infrastructure`: 基础设施配置 (设备、日志等)
+## Configuration
 
-### 数据加载优化
+The configuration file `config/default_config.yaml` contains all parameters for model, data, training, and evaluation. Main configuration items include:
 
-为了处理大型数据集，我们提供了多种数据加载优化方案：
+- `model`: Model architecture parameters
+- `data`: Data processing parameters
+- `training`: Training hyperparameters
+- `evaluation`: Evaluation parameters
+- `infrastructure`: Infrastructure configuration (device, logging, etc.)
 
-1. **懒加载**：按需处理数据chunk，减少初始内存占用
-2. **内存高效加载器**：使用LRU缓存机制，平衡内存使用和性能
-3. **预处理脚本**：预先处理数据，避免训练时重复计算
+### Data Loading Optimization
 
-详细信息请参见 `数据加载优化方案.md` 文件。
+To handle large datasets, we provide several data loading optimization schemes:
 
-## 技术特点
+1. **Lazy Loading**: Process data chunks on demand to reduce initial memory usage
+2. **Memory-Efficient Loader**: Use LRU cache mechanism to balance memory usage and performance
+3. **Preprocessing Script**: Pre-process data to avoid repeated calculations during training
 
-本项目实现了以下关键技术：
+Detailed information can be found in the `数据加载优化方案.md` file.
 
-1. **ContinualGNN**: 持续学习机制，防止灾难性遗忘
-2. **StreamE**: 流式图构建和增量更新
-3. **双重视角知识巩固**: 结合数据回放和模型正则化
-4. **分层-重要性采样**: 优化记忆库更新策略
-5. **近似影响检测**: 高效检测文档变化对知识图谱的影响
+## Technical Features
 
-## 许可证
+This project implements the following key technologies:
 
-本项目基于 MIT 许可证开源。
+1. **ContinualGNN**: Continual learning mechanism to prevent catastrophic forgetting
+2. **StreamE**: Streaming graph construction and incremental updates
+3. **Dual-Perspective Knowledge Consolidation**: Combines data replay and model regularization
+4. **Hierarchical-Importance Sampling**: Optimizes memory buffer update strategy
+5. **Approximate Influence Detection**: Efficiently detects the impact of document changes on the knowledge graph
+
+## License
+
+This project is open-sourced under the MIT License.
