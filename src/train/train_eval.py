@@ -15,7 +15,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from src.model.extractor import StructureExtractor
 from src.data.dataset import ReDocREDDataset
 from src.train.trainer import PretrainTrainer
-from src.evaluate.evaluate import evaluate_model
+from src.evaluate.evaluate_adapted import evaluate_model
 from src.utils.config import load_config, validate_config
 from src.utils.logger import setup_default_logger
 
@@ -178,7 +178,7 @@ def evaluate_model_from_checkpoint(args, config: Dict[str, Any]):
         model=model,
         dataset=test_dataset,
         config=config,
-        batch_size=config['evaluation'].get('batch_size', 16)
+        batch_size=config['evaluation'].get('batch_size', 1)
     )
     
     # Print results
@@ -243,7 +243,7 @@ def main():
             model=model,
             dataset=test_dataset,
             config=config,
-            batch_size=config['evaluation'].get('batch_size', 16)
+            batch_size=config['evaluation'].get('batch_size', 1)
         )
         
         # Print results

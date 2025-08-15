@@ -49,7 +49,7 @@ class PretrainTrainer:
         # Training configuration
         self.training_config = config['training']
         self.batch_size = self.training_config['batch_size']
-        self.learning_rate = self.training_config['learning_rate']
+        self.learning_rate = float(self.training_config['learning_rate'])
         self.num_epochs = self.training_config['num_epochs']
         self.warmup_steps = self.training_config.get('warmup_steps', 0)
         self.gradient_clip_norm = self.training_config.get('gradient_clip_norm', 1.0)
@@ -181,10 +181,13 @@ class PretrainTrainer:
     
     def _collate_fn(self, batch: List[Dict]) -> Dict[str, Any]:
         """Custom collate function for batching."""
-        # This is a simple implementation - can be enhanced based on needs
+        # Convert lists to tensors
+        input_ids = [torch.tensor(item['input_ids']) for item in batch]
+        attention_mask = [torch.tensor(item['attention_mask']) for item in batch]
+        
         return {
-            'input_ids': torch.stack([item['input_ids'] for item in batch]),
-            'attention_mask': torch.stack([item['attention_mask'] for item in batch]),
+            'input_ids': torch.stack(input_ids),
+            'attention_mask': torch.stack(attention_mask),
             'entities': [item['entities'] for item in batch],
             'relations': [item['relations'] for item in batch],
             'texts': [item['text'] for item in batch]

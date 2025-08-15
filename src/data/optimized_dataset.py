@@ -60,7 +60,7 @@ class OptimizedReDocREDDataset(Dataset):
         if chunk_file_idx >= len(self.chunk_index['chunk_files']):
             raise IndexError(f"Chunk file index {chunk_file_idx} out of range")
         
-        chunk_file = self.chunk_index['chunk_files'][chunk_file_idx]
+        chunk_file = os.path.join(self.data_dir, self.chunk_index['chunk_files'][chunk_file_idx])
         with open(chunk_file, 'r', encoding='utf-8') as f:
             return json.load(f)
     

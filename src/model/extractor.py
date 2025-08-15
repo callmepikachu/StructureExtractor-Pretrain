@@ -144,6 +144,7 @@ class StructureExtractor(nn.Module):
     def __init__(self, config: Dict[str, Any]):
         super().__init__()
         self.config = config
+        self.device = torch.device('cpu')  # Default device, will be updated when moved to GPU
         
         # Model dimensions
         self.hidden_dim = config['model']['hidden_dim']
@@ -170,14 +171,8 @@ class StructureExtractor(nn.Module):
             for i in range(config['model']['gnn_layers'])
         ])
         
-        # GNN layers
-        self.gnn_layers = nn.ModuleList([
-            GATConv(self.hidden_dim if i == 0 else self.gnn_hidden_dim, 
-                   self.gnn_hidden_dim, heads=4, concat=False)
-            for i in range(config['model']['gnn_layers'])
-        ])
-        
         # Output layers
+        self.entity_projection = nn.Linear(self.hidden_dim, self.gnn_hidden_dim)
         self.entity_classifier = nn.Linear(self.gnn_hidden_dim, config['data']['max_entities'])
         self.relation_classifier = nn.Linear(self.gnn_hidden_dim * 2, config['data']['max_relations'])
         
@@ -191,6 +186,11 @@ class StructureExtractor(nn.Module):
         
         # Initialize weights
         self._init_weights()
+    
+    def to(self, device):
+        """Override to method to keep track of device."""
+        self.device = device
+        return super().to(device)
     
     def _init_weights(self):
         """Initialize model weights."""
@@ -208,6 +208,9 @@ class StructureExtractor(nn.Module):
         # Tokenize input text
         inputs = self.tokenizer(text_chunk, return_tensors='pt',
                                max_length=512, truncation=True, padding=True)
+
+        # Move inputs to the same device as the model
+        inputs = {k: v.to(self.device) for k, v in inputs.items()}
 
         # Get contextual embeddings
         with torch.no_grad():
@@ -273,7 +276,8 @@ class StructureExtractor(nn.Module):
                 # Update existing entity attributes if needed
                 old_attrs = self.graph.node_attributes.get(linked_entity['id'], {})
                 new_attrs = self._update_attributes(old_attrs, entity)
-                if old_attrs != new_attrs:
+                # Check if attributes have changed
+                if not self._attrs_equal(old_attrs, new_attrs):
                     delta_attributes[linked_entity['id']] = new_attrs
 
         # Process relations
@@ -289,6 +293,24 @@ class StructureExtractor(nn.Module):
             'edges': delta_edges,
             'attributes': delta_attributes
         }
+
+    def _attrs_equal(self, attrs1: Dict, attrs2: Dict) -> bool:
+        """Check if two attribute dictionaries are equal, handling tensors properly."""
+        if set(attrs1.keys()) != set(attrs2.keys()):
+            return False
+        
+        for key in attrs1:
+            val1, val2 = attrs1[key], attrs2[key]
+            
+            # Handle tensor comparison
+            if isinstance(val1, torch.Tensor) and isinstance(val2, torch.Tensor):
+                if not torch.equal(val1, val2):
+                    return False
+            # Handle other types
+            elif val1 != val2:
+                return False
+                
+        return True
 
     def entity_linking(self, candidate_entity: Dict) -> Dict:
         """
@@ -379,36 +401,34 @@ class StructureExtractor(nn.Module):
         except nx.NetworkXNoPath:
             return float('inf')
 
-    def update_graph_and_model(self, delta_graph: Dict, influenced_nodes: Set[str]):
+    def update_graph_and_model(self, delta_graph: GraphStructure, 
+                              influenced_nodes: List[str]):
         """
-        Core update function implementing dual-perspective knowledge consolidation.
-        Combines data replay and model regularization.
+        Update graph and model with dual-perspective consolidation.
+        Combines new knowledge, historical knowledge, and model regularization.
         """
-        # Get replay nodes from memory buffer
+        # Get nodes for data replay from memory buffer
         replay_nodes = self.memory_buffer.get_nodes()
-
-        # Update Fisher information matrix if needed
-        if self.fisher_matrix is None:
-            self.fisher_matrix = FisherMatrix({name: param for name, param in self.named_parameters()})
-
-        # Define loss function components
-        def compute_total_loss():
-            total_loss = 0.0
-
-            # 1. New knowledge loss (on influenced nodes)
+        
+        def compute_total_loss() -> torch.Tensor:
+            """Compute total loss combining all perspectives."""
+            # Initialize loss as a tensor with gradient tracking
+            total_loss = torch.tensor(0.0, device=self.device, requires_grad=True)
+            
+            # 1. New knowledge loss (influenced nodes)
             if influenced_nodes:
                 new_loss = self._compute_node_loss(influenced_nodes)
-                total_loss += new_loss
+                total_loss = total_loss + new_loss
 
             # 2. Historical knowledge loss (data replay)
             if replay_nodes:
                 replay_loss = self._compute_node_loss(replay_nodes)
-                total_loss += replay_loss
+                total_loss = total_loss + replay_loss
 
             # 3. Model regularization loss (EWC)
             if self.previous_params is not None:
                 reg_loss = self._compute_regularization_loss()
-                total_loss += self.regularization_weight * reg_loss
+                total_loss = total_loss + self.regularization_weight * reg_loss
 
             return total_loss
 
@@ -418,7 +438,8 @@ class StructureExtractor(nn.Module):
         for epoch in range(5):  # Few optimization steps
             optimizer.zero_grad()
             loss = compute_total_loss()
-            if loss.requires_grad:
+            # Check if loss requires gradient before calling backward
+            if isinstance(loss, torch.Tensor) and loss.requires_grad:
                 loss.backward()
                 optimizer.step()
 
@@ -441,8 +462,11 @@ class StructureExtractor(nn.Module):
                 # Get node embedding and compute a simple reconstruction loss
                 embedding = self.graph.node_embeddings[node_id]
 
+                # Project embedding to GNN hidden dimension
+                projected_embedding = self.entity_projection(embedding)
+
                 # Simple autoencoder-style loss (placeholder)
-                reconstructed = self.entity_classifier(embedding)
+                reconstructed = self.entity_classifier(projected_embedding)
                 target = torch.zeros_like(reconstructed)  # Placeholder target
 
                 loss = F.mse_loss(reconstructed, target)
@@ -452,7 +476,11 @@ class StructureExtractor(nn.Module):
 
     def _compute_regularization_loss(self) -> torch.Tensor:
         """Compute EWC regularization loss."""
-        reg_loss = torch.tensor(0.0)
+        # Return zero loss if fisher_matrix is not initialized
+        if self.fisher_matrix is None:
+            return torch.tensor(0.0, device=self.device)
+        
+        reg_loss = torch.tensor(0.0, device=self.device)
 
         for name, param in self.named_parameters():
             if name in self.previous_params and name in self.fisher_matrix.fisher_info:
@@ -495,11 +523,11 @@ class StructureExtractor(nn.Module):
                 x.append(features)
                 node_mapping[nid] = i
             else:
-                x.append(torch.zeros(self.hidden_dim))
+                x.append(torch.zeros(self.hidden_dim, device=self.device))
                 node_mapping[nid] = i
 
         if not x:
-            return torch.zeros(self.gnn_hidden_dim)
+            return torch.zeros(self.gnn_hidden_dim, device=self.device)
 
         x = torch.stack(x)
 
@@ -510,9 +538,9 @@ class StructureExtractor(nn.Module):
                 edge_index.append([node_mapping[edge[0]], node_mapping[edge[1]]])
 
         if not edge_index:
-            edge_index = torch.empty((2, 0), dtype=torch.long)
+            edge_index = torch.empty((2, 0), dtype=torch.long, device=self.device)
         else:
-            edge_index = torch.tensor(edge_index).t().contiguous()
+            edge_index = torch.tensor(edge_index, device=self.device).t().contiguous()
 
         # Forward through GNN layers
         for gnn_layer in self.gnn_layers:
@@ -637,7 +665,9 @@ class StructureExtractor(nn.Module):
 
         for entity in entities:
             if 'embedding' in entity:
-                entity_pred = self.entity_classifier(entity['embedding'])
+                # Project entity embedding to GNN hidden dimension
+                projected_embedding = self.entity_projection(entity['embedding'])
+                entity_pred = self.entity_classifier(projected_embedding)
                 entity_logits.append(entity_pred)
 
         for relation in relations:
@@ -659,5 +689,6 @@ class StructureExtractor(nn.Module):
         """Get embedding for entity by ID."""
         for entity in entities:
             if entity['id'] == entity_id and 'embedding' in entity:
-                return entity['embedding']
+                # Project embedding to GNN hidden dimension
+                return self.entity_projection(entity['embedding'])
         return None

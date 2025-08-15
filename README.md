@@ -85,20 +85,16 @@ bash scripts/run_pipeline.sh
 ```
 
 ### 3. 单独训练模型
+\n
+#### 使用预处理数据训练（推荐用于大数据集）
+```
+python src/train/train.py --config config/default_config.yaml --train-data data/preprocessed_train --dev-data data/dev_revised.json --output-dir output --use-preprocessed-data
+```
 ```
 python src/train/train.py --config config/default_config.yaml --train-data data/train_revised.json --dev-data data/dev_revised.json --output-dir output
 ```
 
-### 4. 评估模型
-```
-python src/evaluate/eval.py \\
-    --config config/default_config.yaml \\
-    --checkpoint output/checkpoints/best_model.pt \\
-    --test-data data/dev.json \\
-    --output-dir output
-```
-
-### 5. 数据预处理（可选，推荐用于大数据集）
+### 4. 评估模型\n\n使用适配后的评估脚本（推荐）：\n```\npython src/evaluate/eval_adapted.py \\\n    --config config/default_config.yaml \\\n    --checkpoint output/checkpoints/best_model.pt \\\n    --test-data data/dev.json \\\n    --output-dir output\n```\n\n或者使用原始评估脚本：\n```\npython src/evaluate/eval.py \\\n    --config config/default_config.yaml \\\n    --checkpoint output/checkpoints/best_model.pt \\\n    --test-data data/dev.json \\\n    --output-dir output\n```\n\n### 5. 数据预处理（可选，推荐用于大数据集）
 ```
 python scripts/preprocess_data.py     --config config/default_config.yaml     --input-data data/train_revised.json     --output-dir data/preprocessed_train
 ```

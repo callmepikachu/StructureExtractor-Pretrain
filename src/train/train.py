@@ -14,7 +14,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from src.model.extractor import StructureExtractor
 from src.data.dataset import ReDocREDDataset
-from src.data.optimized_dataset import MemoryEfficientReDocREDDataset
+from src.data.optimized_dataset import MemoryEfficientReDocREDDataset, OptimizedReDocREDDataset
 from src.train.trainer import PretrainTrainer
 from src.utils.config import load_config, validate_config
 from src.utils.logger import setup_default_logger
@@ -35,7 +35,7 @@ def parse_args():
         "--train-data",
         type=str,
         required=True,
-        help="Path to training data file"
+        help="Path to training data file or directory"
     )
     
     parser.add_argument(
@@ -50,6 +50,12 @@ def parse_args():
         type=str,
         default=None,
         help="Output directory for checkpoints and logs"
+    )
+    
+    parser.add_argument(
+        "--use-preprocessed-data",
+        action="store_true",
+        help="Whether to use preprocessed data (directory) instead of raw data (file)"
     )
     
     return parser.parse_args()
@@ -73,18 +79,18 @@ def main():
     
     # Update paths in config if output directory is specified
     if args.output_dir:
-        config['paths']['model_dir'] = os.path.join(args.output_dir, 'checkpoints')
-        config['paths']['log_dir'] = os.path.join(args.output_dir, 'logs')
-        config['infrastructure']['logging']['log_dir'] = os.path.join(args.output_dir, 'logs')
+        config["paths"]["model_dir"] = os.path.join(args.output_dir, "checkpoints")
+        config["paths"]["log_dir"] = os.path.join(args.output_dir, "logs")
+        config["infrastructure"]["logging"]["log_dir"] = os.path.join(args.output_dir, "logs")
     
     # Set random seed for reproducibility
-    seed = config.get('seed', 42)
+    seed = config.get("seed", 42)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
     
     # Set deterministic behavior if requested
-    if config.get('deterministic', True):
+    if config.get("deterministic", True):
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
     
@@ -96,26 +102,31 @@ def main():
     logger.info("Loading training data")
     
     # Use optimized dataset if enabled in config
-    if config['data'].get('use_memory_efficient_loader', False):
+    if args.use_preprocessed_data:
+        train_dataset = OptimizedReDocREDDataset(
+            data_dir=args.train_data,
+            max_seq_length=config["data"].get("max_seq_length", 512)
+        )
+    elif config["data"].get("use_memory_efficient_loader", False):
         train_dataset = MemoryEfficientReDocREDDataset(
             data_path=args.train_data,
-            max_seq_length=config['data'].get('max_seq_length', 512),
-            max_entities=config['data'].get('max_entities', 100),
-            max_relations=config['data'].get('max_relations', 50),
-            chunk_size=config['data'].get('chunk_size', 3),
-            overlap_size=config['data'].get('overlap_size', 1),
-            max_documents=config['data'].get('max_documents', None),
-            cache_size=config['data'].get('cache_size', 100)
+            max_seq_length=config["data"].get("max_seq_length", 512),
+            max_entities=config["data"].get("max_entities", 100),
+            max_relations=config["data"].get("max_relations", 50),
+            chunk_size=config["data"].get("chunk_size", 3),
+            overlap_size=config["data"].get("overlap_size", 1),
+            max_documents=config["data"].get("max_documents", None),
+            cache_size=config["data"].get("cache_size", 100)
         )
     else:
         train_dataset = ReDocREDDataset(
             data_path=args.train_data,
-            max_seq_length=config['data'].get('max_seq_length', 512),
-            max_entities=config['data'].get('max_entities', 100),
-            max_relations=config['data'].get('max_relations', 50),
-            chunk_size=config['data'].get('chunk_size', 3),
-            overlap_size=config['data'].get('overlap_size', 1),
-            max_documents=config['data'].get('max_documents', None)
+            max_seq_length=config["data"].get("max_seq_length", 512),
+            max_entities=config["data"].get("max_entities", 100),
+            max_relations=config["data"].get("max_relations", 50),
+            chunk_size=config["data"].get("chunk_size", 3),
+            overlap_size=config["data"].get("overlap_size", 1),
+            max_documents=config["data"].get("max_documents", None)
         )
     
     dev_dataset = None
@@ -123,9 +134,9 @@ def main():
         logger.info("Loading validation data")
         dev_dataset = ReDocREDDataset(
             data_path=args.dev_data,
-            max_seq_length=config['data'].get('max_seq_length', 512),
-            max_entities=config['data'].get('max_entities', 100),
-            max_relations=config['data'].get('max_relations', 50)
+            max_seq_length=config["data"].get("max_seq_length", 512),
+            max_entities=config["data"].get("max_entities", 100),
+            max_relations=config["data"].get("max_relations", 50)
         )
     
     # Create trainer

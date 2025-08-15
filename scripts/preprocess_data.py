@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 import logging
 from typing import Dict, List, Any
+import torch
 
 # Add project root to Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -55,8 +56,20 @@ def parse_args():
 def load_config(config_path: str) -> Dict[str, Any]:
     """Load configuration from YAML file."""
     import yaml
-    with open(config_path, 'r', encoding='utf-8') as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
+
+
+def convert_tensor_to_list(data):
+    """Recursively convert PyTorch tensors to lists."""
+    if isinstance(data, torch.Tensor):
+        return data.tolist()
+    elif isinstance(data, dict):
+        return {key: convert_tensor_to_list(value) for key, value in data.items()}
+    elif isinstance(data, list):
+        return [convert_tensor_to_list(item) for item in data]
+    else:
+        return data
 
 
 def preprocess_data_to_chunks(input_path: str, 
@@ -78,24 +91,19 @@ def preprocess_data_to_chunks(input_path: str,
     # Initialize dataset with lazy loading
     dataset = ReDocREDDataset(
         data_path=input_path,
-        max_seq_length=config['data'].get('max_seq_length', 512),
-        max_entities=config['data'].get('max_entities', 100),
-        max_relations=config['data'].get('max_relations', 50),
-        chunk_size=config['data'].get('chunk_size', 3),
-        overlap_size=config['data'].get('overlap_size', 1),
-        max_documents=config['data'].get('max_documents', None)
+        max_seq_length=config["data"].get("max_seq_length", 512),
+        max_entities=config["data"].get("max_entities", 100),
+        max_relations=config["data"].get("max_relations", 50),
+        chunk_size=config["data"].get("chunk_size", 3),
+        overlap_size=config["data"].get("overlap_size", 1),
+        max_documents=config["data"].get("max_documents", None)
     )
-    # # Debug info
-    # print(f"[DEBUG] Dataset type: {type(dataset)}")
-    # print(f"[DEBUG] Dataset length: {len(dataset)}")
-    # print(f"[DEBUG] Dataset first item keys: {dataset[0].keys() if len(dataset) > 0 else 'Empty dataset'}")
-    # print(f"[DEBUG] First item content sample: {dataset[0] if len(dataset) > 0 else None}")
 
     # Process and save chunks
     total_chunks = len(dataset)
     chunk_size = 1000  # Save chunks in batches
     chunk_files = []
-    import  time
+    import time
     
     print(f"Processing {total_chunks} chunks...")
     
@@ -111,6 +119,8 @@ def preprocess_data_to_chunks(input_path: str,
 
             try:
                 chunk_data = dataset[j]
+                # Convert tensors to lists for JSON serialization
+                chunk_data = convert_tensor_to_list(chunk_data)
                 batch_chunks.append(chunk_data)
             except Exception as e:
                 print(f"Error processing chunk {j}: {e}")
@@ -120,7 +130,7 @@ def preprocess_data_to_chunks(input_path: str,
         # Save batch to file
         save_start = time.time()
         batch_file = os.path.join(output_dir, f"chunks_{i//chunk_size:04d}.json")
-        with open(batch_file, 'w', encoding='utf-8') as f:
+        with open(batch_file, "w", encoding="utf-8") as f:
             json.dump(batch_chunks, f, ensure_ascii=False, indent=2)
         
         chunk_files.append(batch_file)
@@ -131,11 +141,11 @@ def preprocess_data_to_chunks(input_path: str,
     
     # Save chunk index
     index_file = os.path.join(output_dir, "chunk_index.json")
-    with open(index_file, 'w', encoding='utf-8') as f:
+    with open(index_file, "w", encoding="utf-8") as f:
         json.dump({
-            'chunk_files': chunk_files,
-            'total_chunks': total_chunks,
-            'chunk_size': chunk_size
+            "chunk_files": chunk_files,
+            "total_chunks": total_chunks,
+            "chunk_size": chunk_size
         }, f, ensure_ascii=False, indent=2)
     
     print(f"Preprocessing completed. Index saved to {index_file}")
