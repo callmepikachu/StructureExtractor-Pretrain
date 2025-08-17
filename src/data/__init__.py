@@ -1,6 +1,13 @@
-"""Data processing modules for StructureExtractor-Pretrain."""
+"""
+Data module for StructureExtractor-Pretrain.
+"""
 
+# Expose the main dataset class
 from .dataset import ReDocREDDataset
-from .collator import DataCollator
+from .optimized_dataset import MemoryEfficientReDocREDDataset, OptimizedReDocREDDataset
 
-__all__ = ["ReDocREDDataset", "DataCollator"]
+__all__ = [
+    "ReDocREDDataset",
+    "MemoryEfficientReDocREDDataset",
+    "OptimizedReDocREDDataset",
+]
